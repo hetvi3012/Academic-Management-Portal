@@ -7,7 +7,7 @@ import {
   Paper, Alert, Snackbar, CircularProgress, Chip, MenuItem, Grid
 } from '@mui/material';
 import {
-  Menu as MenuIcon, Dashboard, Book, Assignment, Person, Logout, School, CheckCircle, Cancel, HourglassEmpty
+  Menu as MenuIcon,Class,DoneAll, Dashboard, Book, Assignment, Person, Logout, School, CheckCircle, Cancel, HourglassEmpty
 } from '@mui/icons-material';
 import { useAuth } from '@/contexts/AuthContext';
 import { facultyAPI, academicAPI } from '@/services/api';
@@ -47,19 +47,22 @@ const FacultyDashboard = () => {
   
   const [instructorRequests, setInstructorRequests] = useState([]);
   const [advisorRequests, setAdvisorRequests] = useState([]);
-
+  // ... existing states
+  const [gradeInputs, setGradeInputs] = useState({}); // Stores grades being typed: { enrollmentId: "A" }
+  // [NEW] State for My Courses Tab
+  const [myOfferings, setMyOfferings] = useState([]); 
+  const [selectedCourse, setSelectedCourse] = useState(null); // Which course is selected
+  const [enrolledStudents, setEnrolledStudents] = useState([]); // Students in that course
   // 1. Initial Load (Catalog)
   useEffect(() => {
     fetchCourses();
   }, []);
 
-  // 2. Tab Switch Logic
   useEffect(() => {
-    if (activeTab === 1) {
-      fetchInstructorRequests();
-    } else if (activeTab === 2) {
-      fetchAdvisorRequests();
-    }
+    if (activeTab === 0) fetchCourses(); // Catalog
+    if (activeTab === 1) fetchInstructorRequests();
+    if (activeTab === 2) fetchAdvisorRequests();
+    if (activeTab === 3) fetchMyOfferings(); // [NEW] Fetch my courses
   }, [activeTab]);
 
   const fetchCourses = async () => {
@@ -68,6 +71,56 @@ const FacultyDashboard = () => {
       setCourses(response.data || []);
     } catch (error) {
       console.error('Failed to fetch catalog');
+    }
+  };
+  const handleUpdateGrade = async (enrollmentId) => {
+    const grade = gradeInputs[enrollmentId];
+    if (!grade) return;
+    try {
+        await facultyAPI.updateGrade({ enrollmentId, grade });
+        showSnackbar('Grade saved successfully', 'success');
+    } catch (err) { showSnackbar('Failed to save grade', 'error'); }
+  };
+
+  const handleCompleteCourse = async () => {
+    if(!window.confirm("Are you sure? This will lock the course and publish grades.")) return;
+    try {
+        await facultyAPI.completeCourse({ offeringId: selectedCourse.id });
+        showSnackbar('Course marked as Completed', 'success');
+        setSelectedCourse(null); // Go back to list
+        fetchMyOfferings(); // Refresh list to show 'completed' status
+    } catch (err) { showSnackbar('Failed to complete course', 'error'); }
+  };
+  const fetchMyOfferings = async () => {
+    setLoading(true);
+    try {
+      const response = await facultyAPI.getMyOfferings();
+      setMyOfferings(response.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleViewStudents = async (course) => {
+    setLoading(true);
+    try {
+      const response = await facultyAPI.getCourseStudents(course.id);
+      
+      // [NEW] Pre-fill existing grades into state
+      const initialGrades = {};
+      response.data.forEach(s => {
+          // Ensure your backend query returns 'enrollment_id' and 'grade'
+          if(s.grade) initialGrades[s.enrollment_id] = s.grade; 
+      });
+      setGradeInputs(initialGrades);
+      
+      setEnrolledStudents(response.data || []);
+      setSelectedCourse(course);
+    } catch (err) {
+      showSnackbar('Failed to load student list', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -268,6 +321,7 @@ const FacultyDashboard = () => {
             <Tab icon={<Book />} label="Float Course" />
             <Tab icon={<Assignment />} label="Instructor Approvals" />
             <Tab icon={<Person />} label="Advisor Approvals" />
+            <Tab icon={<Class />} label="My Courses" />
           </Tabs>
         </Paper>
 
@@ -479,6 +533,125 @@ const FacultyDashboard = () => {
             </CardContent>
           </Card>
         )}
+
+{activeTab === 3 && (
+  <Card variant="outlined">
+    <CardContent>
+      {!selectedCourse ? (
+        // VIEW 1: LIST OF COURSES
+        <>
+          <Typography variant="h6" gutterBottom>My Active Courses</Typography>
+          {myOfferings.length === 0 ? (
+             <Alert severity="info">You haven't floated any courses yet.</Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead sx={{ bgcolor: 'grey.100' }}>
+                  <TableRow>
+                    <TableCell><strong>Code</strong></TableCell>
+                    <TableCell><strong>Title</strong></TableCell>
+                    <TableCell><strong>Status</strong></TableCell>
+                    <TableCell align="center"><strong>Action</strong></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {myOfferings.map((course) => (
+                    <TableRow key={course.id}>
+                      <TableCell><strong>{course.course_code}</strong></TableCell>
+                      <TableCell>{course.title}</TableCell>
+                      <TableCell>
+                         <Chip label={course.status} size="small" 
+                           color={course.status === 'active' ? 'success' : course.status === 'completed' ? 'default' : 'warning'} />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Button variant="outlined" size="small" onClick={() => handleViewStudents(course)}>
+                          Manage / Grade
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
+      ) : (
+        // VIEW 2: GRADING INTERFACE
+        <>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Button onClick={() => setSelectedCourse(null)} sx={{ mr: 2 }}>&larr; Back</Button>
+            
+            {/* COMPLETE COURSE BUTTON */}
+            {selectedCourse.status === 'active' && (
+                <Button 
+                    variant="contained" 
+                    color="warning" 
+                    startIcon={<DoneAll />}
+                    onClick={handleCompleteCourse}
+                >
+                    Mark Course Completed
+                </Button>
+            )}
+          </Box>
+          
+          <Typography variant="h6" color="primary" gutterBottom>
+            Grading: {selectedCourse.course_code}
+          </Typography>
+
+          {enrolledStudents.length === 0 ? (
+            <Alert severity="warning">No students enrolled yet.</Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table>
+                <TableHead sx={{ bgcolor: 'grey.100' }}>
+                  <TableRow>
+                    <TableCell><strong>Entry No</strong></TableCell>
+                    <TableCell><strong>Name</strong></TableCell>
+                    <TableCell><strong>Grade</strong></TableCell>
+                    <TableCell><strong>Action</strong></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {enrolledStudents.map((student) => (
+                    <TableRow key={student.enrollment_id}> {/* Ensure backend sends enrollment_id */}
+                      <TableCell>{student.entry_number}</TableCell>
+                      <TableCell>{student.name}</TableCell>
+                      
+                      {/* GRADE INPUT */}
+                      <TableCell>
+                        <TextField 
+                            size="small" 
+                            placeholder="e.g. A"
+                            value={gradeInputs[student.enrollment_id] || ''}
+                            onChange={(e) => setGradeInputs({...gradeInputs, [student.enrollment_id]: e.target.value.toUpperCase()})}
+                            disabled={selectedCourse.status === 'completed'}
+                            sx={{ width: 80 }}
+                        />
+                      </TableCell>
+                      
+                      {/* SAVE BUTTON */}
+                      <TableCell>
+                        <Button 
+                            variant="contained" 
+                            size="small"
+                            disabled={selectedCourse.status === 'completed' || !gradeInputs[student.enrollment_id]}
+                            onClick={() => handleUpdateGrade(student.enrollment_id)}
+                        >
+                            Save
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
+      )}
+    </CardContent>
+  </Card>
+)}
+
       </Box>
 
       <Snackbar

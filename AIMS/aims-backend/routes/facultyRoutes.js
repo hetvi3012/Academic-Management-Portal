@@ -14,5 +14,10 @@ router.post('/action/instructor', auth(['faculty']), facultyController.handleIns
 // Advisee Requests (Advisor Role)
 router.get('/requests/advisor', auth(['faculty']), facultyController.getAdvisorRequests);
 router.post('/action/advisor', auth(['faculty']), facultyController.handleAdvisorAction);
-
+router.post('/grade', auth(['faculty']), facultyController.updateStudentGrade);
+router.post('/complete', auth(['faculty']), facultyController.completeCourse);
+// 2. Grading & Completion (*** NEW ROUTES ***)
+router.get('/course/:offeringId/students', auth(['faculty']), facultyController.getCourseStudents);
+router.post('/grade', auth(['faculty']), facultyController.updateStudentGrade);
+router.post('/complete', auth(['faculty']), facultyController.completeCourse);
 module.exports = router;
