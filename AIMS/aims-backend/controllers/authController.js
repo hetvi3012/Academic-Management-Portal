@@ -5,13 +5,20 @@ require('dotenv').config();
 
 // Configure Email Transporter
 // NOTE: For real gmail, you need an App Password. For testing, we use Ethereal (fake email).
+// const transporter = nodemailer.createTransport({
+//     host: 'smtp.ethereal.email',
+//     port: 587,
+//     auth: {
+//         user: 'ethereal.user@ethereal.email', // Replace with real credentials later
+//         pass: 'ethereal.pass'
+//     }
+// });
 const transporter = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    auth: {
-        user: 'ethereal.user@ethereal.email', // Replace with real credentials later
-        pass: 'ethereal.pass'
-    }
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER, // Reads from your .env
+    pass: process.env.EMAIL_PASS  // Reads from your .env
+  }
 });
 
 // 1. GENERATE & SEND OTP
@@ -34,6 +41,26 @@ exports.sendOtp = async (req, res) => {
       'UPDATE users SET otp_code = $1, otp_expires_at = $2 WHERE email = $3',
       [otp, expiry, email]
     );
+    const mailOptions = {
+      from: `"AIMS Portal" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'AIMS Portal Login OTP',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd; max-width: 400px;">
+          <h2 style="color: #1976d2;">Login Verification</h2>
+          <p>Hello,</p>
+          <p>Your One-Time Password (OTP) to login is:</p>
+          <h1 style="background: #f4f4f4; padding: 10px; text-align: center; letter-spacing: 5px;">${otp}</h1>
+          <p>This code is valid for 10 minutes.</p>
+          <hr>
+          <p style="font-size: 12px; color: #777;">If you did not request this, please ignore this email.</p>
+        </div>
+      `
+    };
+    await transporter.sendMail(mailOptions);
+    console.log(`Email sent successfully to ${email}`);
+
+    res.json({ message: 'OTP sent to your email address.' });
 
     // Send Email (Console log for easy testing without real email)
     console.log(`>>> OTP for ${email}: ${otp}`); 
