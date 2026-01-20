@@ -8,12 +8,11 @@ import {
   DialogActions, Grid, TextField, MenuItem
 } from '@mui/material';
 import {
-  Menu as MenuIcon, Dashboard, Payment, Book, Person, Logout, School, 
-  CheckCircle, Add, HourglassEmpty, Info, Cancel, Refresh as RefreshIcon
+  Menu as MenuIcon, Dashboard, Payment, Logout, School, 
+  CheckCircle, Refresh as RefreshIcon, HourglassEmpty, Person
 } from '@mui/icons-material';
-import { useAuth } from '@/contexts/AuthContext'; // Ensure path matches your project
-// You'll need to create this API file next, or update your import path
-import { studentAPI } from '@/services/api'; 
+import { useAuth } from '@/contexts/AuthContext';
+import { studentAPI } from '@/services/api';
 
 const drawerWidth = 240;
 
@@ -28,7 +27,7 @@ const getStatusLabel = (status) => {
     case 'enrolled': return 'Registered';
     case 'rejected': return 'Rejected';
     case 'active': return 'Open'; 
-    case 'proposed': return 'Proposed (Not Active)';
+    case 'proposed': return 'Proposed';
     default: return status;
   }
 };
@@ -42,7 +41,6 @@ const getStatusColor = (status) => {
   if (s === 'active') return 'success';
   if (s === 'rejected') return 'error';
   if (s.includes('pending')) return 'warning';
-  if (s === 'proposed') return 'default';
   
   return 'default';
 };
@@ -59,29 +57,42 @@ const StudentDashboard = () => {
   const [offerings, setOfferings] = useState([]);
   const [myEnrollments, setMyEnrollments] = useState([]);
   
+  // Dialog States
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [registerCategory, setRegisterCategory] = useState('open_elective');
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
 
+  // 1. INITIAL LOAD
   useEffect(() => {
-    checkFeesOnMount();
-    fetchData();
+    const initFetch = async () => {
+      setLoading(true);
+      await Promise.all([
+        checkFeeStatus(), // Check DB for fees
+        fetchData()       // Get courses
+      ]);
+      setLoading(false);
+    };
+    initFetch();
   }, []);
 
-  // 1. FEE CHECK
-  const checkFeesOnMount = () => {
-    // We trust local storage for UI state, but backend is the source of truth
-    const localFeeStatus = localStorage.getItem('fees_status');
-    if (localFeeStatus === 'paid') {
-      setFeesPaid(true);
+  // --- API FUNCTIONS ---
+
+  // 2. CHECK FEES (The missing function fixed here)
+  const checkFeeStatus = async () => {
+    try {
+      const response = await studentAPI.getFeeStatus();
+      // Backend returns { paid: true/false }
+      setFeesPaid(response.data.paid);
+    } catch (error) {
+      console.error("Failed to check fee status", error);
+      setFeesPaid(false); // Default to false on error
     }
   };
 
+  // 3. FETCH DATA
   const fetchData = async () => {
-    setLoading(true);
     try {
-      // Parallel fetch for speed
       const [offeringsRes, enrollmentsRes] = await Promise.all([
         studentAPI.getOfferings(),
         studentAPI.getMyCourses()
@@ -89,36 +100,19 @@ const StudentDashboard = () => {
 
       setOfferings(offeringsRes.data || []);
       setMyEnrollments(enrollmentsRes.data || []);
-
     } catch (error) {
       console.error("Fetch Error:", error);
-      showSnackbar('Failed to load data. Please try again.', 'error');
-    } finally {
-      setLoading(false);
+      showSnackbar('Failed to load data. Please refresh.', 'error');
     }
   };
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  // --- ACTIONS ---
 
   const handlePayFees = async () => {
     setLoading(true);
     try {
       await studentAPI.payFees({ amount: 50000 });
-      
-      setFeesPaid(true);
-      localStorage.setItem('fees_status', 'paid'); 
-      
+      setFeesPaid(true); // Update UI immediately
       showSnackbar('Fees paid successfully! You can now register.');
       setPaymentDialogOpen(false);
     } catch (error) {
@@ -144,14 +138,11 @@ const StudentDashboard = () => {
       await fetchData(); // Refresh list to see "Pending" status
     } catch (error) {
       const errMsg = error.response?.data?.error || 'Failed to register';
-      
-      // Auto-detect if the error is about Fees
-      if (errMsg.includes('Fee Payment Pending')) {
-        setFeesPaid(false);
-        localStorage.removeItem('fees_status');
-        showSnackbar('System says Fees are Pending. Please Pay.', 'error');
+      if (errMsg.includes('Fee')) {
+         setFeesPaid(false); // Sync UI if backend says fees pending
+         showSnackbar('Fee Payment Pending. Please Pay.', 'error');
       } else {
-        showSnackbar(errMsg, 'error');
+         showSnackbar(errMsg, 'error');
       }
     } finally {
       setLoading(false);
@@ -161,11 +152,27 @@ const StudentDashboard = () => {
   const openRegisterDialog = (course) => {
     if (!feesPaid) {
       showSnackbar('Please pay your fees first', 'warning');
+      setPaymentDialogOpen(true); // Open payment dialog directly for convenience
       return;
     }
     setSelectedCourse(course);
     setRegisterCategory('open_elective'); // Reset default
     setRegisterDialogOpen(true);
+  };
+
+  // --- UI HELPERS ---
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
   };
 
   // Helper: Find enrollment status for a specific course ID
@@ -217,7 +224,7 @@ const StudentDashboard = () => {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap sx={{ flexGrow: 1 }}>Student Dashboard</Typography>
-          <Button color="inherit" startIcon={<RefreshIcon />} onClick={fetchData} disabled={loading}>
+          <Button color="inherit" startIcon={<RefreshIcon />} onClick={() => { setLoading(true); Promise.all([checkFeeStatus(), fetchData()]).then(() => setLoading(false)); }} disabled={loading}>
             Refresh
           </Button>
           <Box sx={{ ml: 2 }}>
@@ -281,7 +288,7 @@ const StudentDashboard = () => {
                             <TableCell>{enrollment.course_code}</TableCell>
                             <TableCell>{enrollment.title}</TableCell>
                             <TableCell>{enrollment.credits}</TableCell>
-                            <TableCell sx={{ textTransform: 'capitalize' }}>{enrollment.category.replace('_', ' ')}</TableCell>
+                            <TableCell sx={{ textTransform: 'capitalize' }}>{enrollment.category?.replace('_', ' ')}</TableCell>
                             <TableCell>
                               <Chip 
                                 label={getStatusLabel(enrollment.status)} 
@@ -338,7 +345,6 @@ const StudentDashboard = () => {
                             </TableCell>
                             
                             <TableCell>
-                              {/* If Student has status, show that. Else show Course Status */}
                               {studentStatus ? (
                                 <Chip label={getStatusLabel(studentStatus)} color={getStatusColor(studentStatus)} size="small" variant="outlined" />
                               ) : (
@@ -354,7 +360,6 @@ const StudentDashboard = () => {
                                   variant="contained"
                                   size="small"
                                   onClick={() => openRegisterDialog(offering)}
-                                  // Disable if: Fees not paid, OR Course is not Active, OR Course is Full
                                   disabled={!feesPaid || !isCourseActive || isFull}
                                   color="primary"
                                 >

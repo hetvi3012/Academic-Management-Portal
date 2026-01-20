@@ -70,6 +70,7 @@ export const studentAPI = {
   getOfferings: () => api.get('/student/offerings'),
   getMyCourses: () => api.get('/student/my-courses'),
   payFees: (data) => api.post('/student/pay-fees', data),
+  getFeeStatus: () => api.get('/student/fees/status'),
   register: (data) => api.post('/student/register', data),
 };
 
