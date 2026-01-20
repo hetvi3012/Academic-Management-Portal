@@ -279,6 +279,7 @@ const StudentDashboard = () => {
                           <TableCell><strong>Course Name</strong></TableCell>
                           <TableCell><strong>Credits</strong></TableCell>
                           <TableCell><strong>Category</strong></TableCell>
+                          <TableCell><strong>Grade</strong></TableCell>
                           <TableCell><strong>Status</strong></TableCell>
                         </TableRow>
                       </TableHead>
@@ -297,6 +298,25 @@ const StudentDashboard = () => {
                                 icon={enrollment.status === 'enrolled' ? <CheckCircle /> : <HourglassEmpty />}
                               />
                             </TableCell>
+                            <TableCell>
+        {enrollment.grade ? (
+          <Chip label={enrollment.grade} color="success" size="small" variant="filled" />
+        ) : (
+          <Typography variant="caption" color="text.secondary">-</Typography>
+        )}
+      </TableCell>
+      <TableCell>
+        {enrollment.course_status === 'completed' ? (
+           <Chip label="Completed" color="info" size="small" icon={<CheckCircle />} />
+        ) : (
+           <Chip 
+             label={getStatusLabel(enrollment.status)} 
+             color={getStatusColor(enrollment.status)}
+             size="small"
+             icon={enrollment.status === 'enrolled' ? <CheckCircle /> : <HourglassEmpty />}
+           />
+        )}
+      </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

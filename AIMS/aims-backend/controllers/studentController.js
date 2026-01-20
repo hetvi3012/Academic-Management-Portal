@@ -70,20 +70,31 @@ exports.registerCourse = async (req, res) => {
 };
 
 // 4. VIEW MY REGISTERED COURSES
+// 4. VIEW MY REGISTERED COURSES
 exports.getMyCourses = async (req, res) => {
   const studentId = req.user.id;
   try {
-    const result = await pool.query(
-      `SELECT e.id, e.status, e.category, e.offering_id,
-              co.course_code, c.title, c.credits, 
-              co.slot, u.name as instructor
-       FROM enrollments e
-       JOIN course_offerings co ON e.offering_id = co.id
-       JOIN course_catalog c ON co.course_code = c.course_code
-       JOIN users u ON co.instructor_id = u.id
-       WHERE e.student_id = $1`,
-      [studentId]
-    );
+    const result = await pool.query(`
+      SELECT 
+        e.id, 
+        e.status, 
+        e.category, 
+        e.offering_id,
+        e.grade,                  -- [NEW] Fetch Grade
+        co.course_code, 
+        co.status as course_status, -- [NEW] Fetch Course Status (to check if completed)
+        c.title, 
+        c.credits, 
+        co.slot, 
+        u.name as instructor
+      FROM enrollments e
+      JOIN course_offerings co ON e.offering_id = co.id
+      JOIN course_catalog c ON co.course_code = c.course_code
+      JOIN users u ON co.instructor_id = u.id
+      WHERE e.student_id = $1
+      ORDER BY e.id DESC
+    `, [studentId]);
+    
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
