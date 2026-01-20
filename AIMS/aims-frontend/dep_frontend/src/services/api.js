@@ -9,8 +9,7 @@ const api = axios.create({
 
 // Request Interceptor: Attach Token
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  
+  const token = sessionStorage.getItem('token');  
   // Public endpoints don't need token
   if (config.url.includes('/auth/login') || config.url.includes('/auth/send-otp')) {
     return config; 

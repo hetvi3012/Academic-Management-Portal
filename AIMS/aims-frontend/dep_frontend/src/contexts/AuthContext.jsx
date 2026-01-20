@@ -13,10 +13,20 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // 1. Check Session Storage on Load
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
-    if (storedUser && token) setUser(JSON.parse(storedUser));
+    // CHANGE: localStorage -> sessionStorage
+    const storedUser = sessionStorage.getItem('user');
+    const token = sessionStorage.getItem('token');
+    
+    if (storedUser && token) {
+        try {
+            setUser(JSON.parse(storedUser));
+        } catch (e) {
+            console.error("Failed to parse user data", e);
+            sessionStorage.clear();
+        }
+    }
     setLoading(false);
   }, []);
 
@@ -28,15 +38,19 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, otp) => {
     const response = await authAPI.login(email, otp);
     const { token, user: userData } = response.data;
-    localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(userData));
+    
+    // CHANGE: localStorage -> sessionStorage
+    sessionStorage.setItem('token', token);
+    sessionStorage.setItem('user', JSON.stringify(userData));
+    
     setUser(userData);
     return userData;
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    // CHANGE: localStorage -> sessionStorage
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     setUser(null);
   };
 
